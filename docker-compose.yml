@@ -1,0 +1,7 @@
+services:
+  botdc:
+    build: .
+    container_name: botdc
+    restart: unless-stopped
+    env_file:
+      - .env
