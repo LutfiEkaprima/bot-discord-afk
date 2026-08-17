@@ -207,13 +207,18 @@ async function checkTiktokEntry(entry) {
   try {
     const page = await context.newPage();
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20_000 });
-    // Title halaman masih placeholder (URL mentah) sesaat setelah load; TikTok
-    // baru menimpanya lewat JS begitu status live-nya beres ditentukan.
-    await page.waitForTimeout(4_000);
+    // document.title tidak bisa dipercaya sendirian: begitu sebuah akun pernah
+    // live, title halamannya tetap nyangkut "is LIVE" walau live-nya sudah
+    // lama berakhir. Sinyal yang benar-benar akurat adalah elemen <video>
+    // player-nya — itu cuma dirender kalau stream-nya benar-benar sedang
+    // berjalan. Tunggu sampai video itu muncul (atau timeout kalau memang
+    // tidak live).
+    await page.waitForSelector('video', { timeout: 8_000 }).catch(() => null);
+
+    const videoCount = await page.locator('video').count();
+    if (videoCount === 0) return { isLive: false };
 
     const title = await page.title();
-    if (!/\bis live\b/i.test(title)) return { isLive: false };
-
     const cover = await page
       .locator('meta[property="og:image"]')
       .getAttribute('content')
