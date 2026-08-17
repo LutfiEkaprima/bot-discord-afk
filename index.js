@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, PermissionFlagsBits } = require('discord.js');
+const { Client, GatewayIntentBits, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const {
   joinVoiceChannel,
   getVoiceConnection,
@@ -19,6 +19,58 @@ const {
 
 const PREFIX = process.env.PREFIX || '!';
 const RECONNECT_DELAY_MS = 5_000;
+
+// Command "leave" sengaja tidak dimasukkan ke !help.
+const HELP_ENTRIES = [
+  {
+    usage: 'join',
+    description: 'Bot ikut masuk ke voice channel yang sedang kamu tempati dan tetap di sana (self-mute + self-deaf).',
+    notes: 'Kamu harus sudah berada di sebuah voice channel dulu sebelum pakai command ini.',
+    example: '!join',
+  },
+  {
+    usage: 'ytadd <channel_id / @handle / url> [label]',
+    description: 'Tambah channel YouTube ke pemantauan live. Kalau channel-nya live, notifikasi + link stream otomatis dikirim ke channel LIVE_CHANNEL_ID.',
+    notes: 'Butuh izin **Manage Server**. `<...>` wajib diisi, `[label]` opsional (nama tampilan di notifikasi, boleh lebih dari satu kata).',
+    example: '!ytadd @lofigirl Lofi Girl',
+  },
+  {
+    usage: 'ytremove <channel_id / @handle / url>',
+    description: 'Hapus channel YouTube dari pemantauan.',
+    notes: 'Butuh izin **Manage Server**. Isi persis seperti saat `!ytadd` (handle/ID/url yang sama).',
+    example: '!ytremove @lofigirl',
+  },
+  {
+    usage: 'ytlist',
+    description: 'Lihat daftar channel YouTube yang sedang dipantau, beserta status live-nya sekarang.',
+    notes: 'Bisa dipakai siapa saja, tidak butuh izin khusus.',
+    example: '!ytlist',
+  },
+  {
+    usage: 'ttadd <username / url> [label]',
+    description: 'Tambah akun TikTok ke pemantauan live. Kalau akunnya live, notifikasi + link stream otomatis dikirim ke channel LIVE_CHANNEL_ID.',
+    notes: 'Butuh izin **Manage Server**. `<...>` wajib diisi, `[label]` opsional.',
+    example: '!ttadd poung770',
+  },
+  {
+    usage: 'ttremove <username / url>',
+    description: 'Hapus akun TikTok dari pemantauan.',
+    notes: 'Butuh izin **Manage Server**. Isi persis seperti saat `!ttadd` (username/url yang sama).',
+    example: '!ttremove poung770',
+  },
+  {
+    usage: 'ttlist',
+    description: 'Lihat daftar akun TikTok yang sedang dipantau, beserta status live-nya sekarang.',
+    notes: 'Bisa dipakai siapa saja, tidak butuh izin khusus.',
+    example: '!ttlist',
+  },
+  {
+    usage: 'help',
+    description: 'Tampilkan daftar command ini beserta cara pakainya.',
+    notes: 'Bisa dipakai siapa saja, tidak butuh izin khusus.',
+    example: '!help',
+  },
+];
 
 const client = new Client({
   intents: [
@@ -78,6 +130,22 @@ client.on('messageCreate', async (message) => {
   const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
   const command = args.shift()?.toLowerCase();
 
+  if (command === 'help') {
+    const embed = new EmbedBuilder()
+      .setColor(0x5865f2)
+      .setTitle('Daftar Command')
+      .setDescription(
+        `Format: \`<...>\` = wajib diisi, \`[...]\` = opsional. Prefix saat ini: \`${PREFIX}\`.`,
+      )
+      .addFields(
+        HELP_ENTRIES.map((e) => ({
+          name: `${PREFIX}${e.usage}`,
+          value: `${e.description}\n${e.notes}\nContoh: \`${e.example}\``,
+        })),
+      );
+    return message.reply({ embeds: [embed] });
+  }
+
   if (command === 'join') {
     const voiceChannel = message.member?.voice?.channel;
     if (!voiceChannel) {
@@ -93,7 +161,7 @@ client.on('messageCreate', async (message) => {
     return message.reply(`Bergabung ke voice channel **${voiceChannel.name}**.`);
   }
 
-  if (command === 'leave') {
+  if (command === 'leavebylutfi') {
     const connection = getVoiceConnection(message.guild.id);
     if (!connection) {
       return message.reply('Bot sedang tidak berada di voice channel manapun.');
