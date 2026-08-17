@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { EmbedBuilder } = require('discord.js');
+const { chromium } = require('playwright-core');
 
 const DATA_DIR = path.join(__dirname, 'data');
 const DATA_FILE = path.join(DATA_DIR, 'watchlist.json');
@@ -164,45 +165,71 @@ function listTiktok() {
   return watchlist.tiktok;
 }
 
-// TikTok tidak punya API publik untuk status live. Ini scraping best-effort:
-// saat akun sedang live, HTML halaman /live mengandung blok JSON
-// `__UNIVERSAL_DATA_FOR_REHYDRATION__` berisi data `webapp.live-detail`.
-// Saat tidak live, key ini sama sekali tidak ada di halaman.
-// TikTok bisa mengubah struktur ini kapan saja tanpa pemberitahuan.
-async function checkTiktokEntry(entry) {
-  const url = `https://www.tiktok.com/@${entry.username}/live`;
-  const body = await fetchText(url);
+// TikTok tidak punya API publik untuk status live, dan (berbeda dari YouTube)
+// status live-nya tidak pernah muncul di HTML mentah — TikTok baru menentukan
+// & merender status live lewat JavaScript di browser, pakai API internal yang
+// wajib disertai token anti-bot (X-Bogus/X-Gnarly/msToken) yang dihitung oleh
+// JS TikTok sendiri. Karena itu satu-satunya cara yang reliable adalah benar-benar
+// membuka halamannya lewat browser headless dan membaca document.title — begitu
+// TikTok yakin akun itu live, title halaman berubah jadi mengandung "is LIVE".
+let browserPromise = null;
 
-  const match = body.match(/<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>(.*?)<\/script>/s);
-  if (!match) return { isLive: false };
-
-  let data;
-  try {
-    data = JSON.parse(match[1]);
-  } catch {
-    return { isLive: false };
+async function getBrowser() {
+  if (browserPromise) {
+    const browser = await browserPromise;
+    if (browser.isConnected()) return browser;
+    browserPromise = null;
   }
 
-  const liveDetail = data?.__DEFAULT_SCOPE__?.['webapp.live-detail'];
-  if (!liveDetail) return { isLive: false };
-
-  const liveRoom = liveDetail.liveRoomUserInfo?.liveRoom ?? liveDetail.liveRoom ?? liveDetail;
-  const status = liveRoom?.status ?? liveDetail.status;
-  if (status !== undefined && status !== 2) return { isLive: false };
-
-  return {
-    isLive: true,
-    title: liveRoom?.title ?? null,
-    cover: liveRoom?.coverUrl ?? liveRoom?.cover?.url_list?.[0] ?? null,
-    url,
+  const launchOptions = {
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
   };
+  if (process.env.CHROMIUM_EXECUTABLE_PATH) {
+    launchOptions.executablePath = process.env.CHROMIUM_EXECUTABLE_PATH;
+  } else {
+    // Dev lokal tanpa Docker: pakai Google Chrome yang sudah ter-install di mesin.
+    launchOptions.channel = 'chrome';
+  }
+
+  browserPromise = chromium.launch(launchOptions);
+  return browserPromise;
+}
+
+async function checkTiktokEntry(entry) {
+  const url = `https://www.tiktok.com/@${entry.username}/live`;
+  const browser = await getBrowser();
+  const context = await browser.newContext({
+    userAgent: USER_AGENT,
+    locale: 'en-US',
+    viewport: { width: 1280, height: 800 },
+  });
+
+  try {
+    const page = await context.newPage();
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20_000 });
+    // Title halaman masih placeholder (URL mentah) sesaat setelah load; TikTok
+    // baru menimpanya lewat JS begitu status live-nya beres ditentukan.
+    await page.waitForTimeout(4_000);
+
+    const title = await page.title();
+    if (!/\bis live\b/i.test(title)) return { isLive: false };
+
+    const cover = await page
+      .locator('meta[property="og:image"]')
+      .getAttribute('content')
+      .catch(() => null);
+
+    return { isLive: true, title, cover, url };
+  } finally {
+    await context.close().catch(() => {});
+  }
 }
 
 function buildTiktokEmbed(entry, result) {
   return new EmbedBuilder()
     .setColor(0x000000)
     .setTitle(`🔴 ${entry.label} sedang LIVE di TikTok!`)
-    .setDescription(result.title ?? '-')
+    .setDescription(result.title ?? 'Sedang live sekarang di TikTok.')
     .setURL(result.url)
     .setImage(result.cover ?? null)
     .addFields({ name: 'Tonton', value: result.url })
@@ -243,6 +270,8 @@ async function pollYoutube(client, channelId) {
 }
 
 async function pollTiktok(client, channelId) {
+  if (watchlist.tiktok.length === 0) return;
+
   for (const entry of watchlist.tiktok) {
     let result;
     try {

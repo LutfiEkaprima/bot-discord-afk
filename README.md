@@ -19,7 +19,8 @@ Bot Discord yang join ke voice channel lewat command dan tetap bertahan di sana 
    ```bash
    npm install
    ```
-5. Jalankan bot:
+5. Deteksi live TikTok butuh Chromium/Google Chrome asli (lihat bagian [Live Notifier](#live-notifier-youtube--tiktok)). Kalau jalanin lewat Docker, ini sudah otomatis. Kalau jalanin langsung pakai `npm start` di luar Docker, pastikan **Google Chrome** sudah ter-install di mesin kamu (bot otomatis memakainya) — kalau tidak ada Chrome, isi `CHROMIUM_EXECUTABLE_PATH` di `.env` dengan path ke Chromium/Chrome yang ada.
+6. Jalankan bot:
    ```bash
    npm start
    ```
@@ -42,7 +43,7 @@ Alternatif tanpa perlu install Node.js di host, cukup Docker:
    docker compose down
    ```
 
-Setiap kali ubah source code, jalankan ulang `docker compose up -d --build` supaya image ter-rebuild. Daftar pantau YouTube/TikTok disimpan di `data/watchlist.json`, dan folder `data/` di-mount sebagai volume di `docker-compose.yml` supaya datanya tetap tersimpan walau container di-rebuild — tidak perlu setup manual apa pun, foldernya otomatis dibuat.
+Setiap kali ubah source code (atau `Dockerfile`/`package.json`), jalankan ulang `docker compose up -d --build` supaya image ter-rebuild — image-nya sekarang menginstall Chromium juga (buat deteksi live TikTok), jadi build pertama setelah update ini bakal lebih lambat & image-nya lebih besar dari sebelumnya. Daftar pantau YouTube/TikTok disimpan di `data/watchlist.json`, dan folder `data/` di-mount sebagai volume di `docker-compose.yml` supaya datanya tetap tersimpan walau container di-rebuild — tidak perlu setup manual apa pun, foldernya otomatis dibuat.
 
 ## Command
 
@@ -82,8 +83,10 @@ Bot mengecek daftar channel YouTube dan akun TikTok yang ditambahkan lewat comma
 
 Cara kerja deteksinya (implementasi di [liveMonitor.js](liveMonitor.js)):
 
-- **YouTube**: membuka halaman `youtube.com/<channel>/live` dan membaca data live yang di-render Google di halaman itu (tidak butuh API key/kuota). Cukup andal karena YouTube memang menyisipkan status live di HTML halaman tersebut.
-- **TikTok**: TikTok **tidak punya API publik** untuk cek status live. Bot melakukan scraping best-effort ke halaman `tiktok.com/@user/live` dan mendeteksi data live yang muncul di HTML saat akun sedang live. Ini reverse-engineered, bisa berhenti bekerja sewaktu-waktu kalau TikTok mengubah struktur halamannya, dan berpotensi diblokir/dibatasi TikTok kalau poll-nya terlalu sering — kalau itu terjadi, bagian `checkTiktokEntry` di `liveMonitor.js` perlu disesuaikan lagi.
+- **YouTube**: membuka halaman `youtube.com/<channel>/live` dan membaca data live yang di-render Google di halaman itu (tidak butuh API key/kuota, cukup `fetch` biasa). Cukup andal karena YouTube memang menyisipkan status live langsung di HTML halaman tersebut.
+- **TikTok**: TikTok **tidak punya API publik** untuk cek status live, dan berbeda dari YouTube, status live-nya **tidak pernah ada di HTML mentah** — TikTok baru menentukannya lewat JavaScript di browser lewat API internal yang wajib disertai token anti-bot (`X-Bogus`/`X-Gnarly`/`msToken`). Karena itu bot benar-benar membuka halaman `tiktok.com/@user/live` pakai **Chromium headless** (lewat [`playwright-core`](https://playwright.dev/)) dan membaca judul halaman — begitu TikTok yakin akun itu live, judulnya berubah jadi mengandung teks "is LIVE". Sudah diverifikasi kerja dengan benar terhadap akun yang benar-benar live maupun yang tidak.
+  - Konsekuensinya: setiap pengecekan akun TikTok lebih berat & lebih lambat (perlu buka halaman sungguhan, beberapa detik per akun) dibanding YouTube, dan butuh lebih banyak RAM/CPU. Browser Chromium-nya dibuka sekali dan dipakai ulang terus (bukan buka-tutup tiap poll), dan hanya aktif kalau ada minimal satu akun TikTok yang dipantau.
+  - TikTok tetap bisa berubah struktur/perilakunya kapan saja — kalau suatu saat deteksi ini berhenti akurat, bagian `checkTiktokEntry` di `liveMonitor.js` perlu disesuaikan lagi.
 
 Data channel/akun yang dipantau disimpan di `data/watchlist.json` (di-generate otomatis, tidak masuk git).
 
