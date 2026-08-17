@@ -2,7 +2,8 @@ const fs = require('fs');
 const path = require('path');
 const { EmbedBuilder } = require('discord.js');
 
-const DATA_FILE = path.join(__dirname, 'watchlist.json');
+const DATA_DIR = path.join(__dirname, 'data');
+const DATA_FILE = path.join(DATA_DIR, 'watchlist.json');
 const POLL_INTERVAL_MS = Number(process.env.LIVE_POLL_INTERVAL_MS) || 3 * 60 * 1000;
 
 const USER_AGENT =
@@ -17,6 +18,7 @@ function loadWatchlist() {
 }
 
 function saveWatchlist() {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.writeFileSync(DATA_FILE, JSON.stringify(watchlist, null, 2));
 }
 

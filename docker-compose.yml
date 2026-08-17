@@ -6,4 +6,4 @@ services:
     env_file:
       - .env
     volumes:
-      - ./watchlist.json:/app/watchlist.json
+      - ./data:/app/data

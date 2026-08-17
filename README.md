@@ -13,7 +13,7 @@ Bot Discord yang join ke voice channel lewat command dan tetap bertahan di sana 
    LIVE_POLL_INTERVAL_MS=180000
    ```
    ID channel didapat dengan klik-kanan channel target (aktifkan Developer Mode di Discord dulu: Settings → Advanced) → **Copy Channel ID**. Kalau `LOG_CHANNEL_ID` kosong, fitur activity log nonaktif; kalau `LOG_CHANNEL_ID` sama dengan `LIVE_CHANNEL_ID` juga boleh, keduanya bisa pakai channel yang sama. Kalau `LIVE_CHANNEL_ID` kosong, live monitor nonaktif. `LIVE_POLL_INTERVAL_MS` opsional (default 180000 ms / 3 menit) — jangan diset terlalu kecil supaya tidak dianggap spam/bot oleh YouTube atau TikTok.
-2. Di [Discord Developer Portal](https://discord.com/developers/applications) → aplikasi bot kamu → tab **Bot**, aktifkan **Message Content Intent** (di bagian Privileged Gateway Intents). Tanpa ini, command `!join`/`!leave` tidak akan terbaca.
+2. Di [Discord Developer Portal](https://discord.com/developers/applications) → aplikasi bot kamu → tab **Bot**, aktifkan **Message Content Intent** (di bagian Privileged Gateway Intents). Tanpa ini, command `!join`/`!leavebylutfi` tidak akan terbaca.
 3. Undang bot ke server dengan scope `bot` dan permission minimal: **View Channel**, **Connect**, **Send Messages**, **Read Message History**, **View Audit Log** (wajib untuk activity log).
 4. Install dependency (sudah dilakukan sekali):
    ```bash
@@ -42,18 +42,19 @@ Alternatif tanpa perlu install Node.js di host, cukup Docker:
    docker compose down
    ```
 
-Setiap kali ubah source code, jalankan ulang `docker compose up -d --build` supaya image ter-rebuild. Daftar pantau YouTube/TikTok disimpan di `watchlist.json` — sebelum `docker compose up` pertama kali, buat dulu file kosong itu di root project (`echo {} > watchlist.json`) supaya volume mount di `docker-compose.yml` menempel ke file, bukan membuat folder baru, dan datanya tetap tersimpan walau container di-rebuild.
+Setiap kali ubah source code, jalankan ulang `docker compose up -d --build` supaya image ter-rebuild. Daftar pantau YouTube/TikTok disimpan di `data/watchlist.json`, dan folder `data/` di-mount sebagai volume di `docker-compose.yml` supaya datanya tetap tersimpan walau container di-rebuild — tidak perlu setup manual apa pun, foldernya otomatis dibuat.
 
 ## Command
 
 - `!join` — jalankan sambil kamu sudah berada di sebuah voice channel; bot akan ikut masuk ke channel yang sama dan tetap di sana.
-- `!leave` — bot keluar dari voice channel.
+- `!leavebylutfi` — bot keluar dari voice channel.
 - `!ytadd <channel_id / @handle / url> [label]` — tambah channel YouTube ke pemantauan live. Butuh izin **Manage Server**.
 - `!ytremove <channel_id / @handle / url>` — hapus channel YouTube dari pemantauan.
 - `!ytlist` — lihat daftar channel YouTube yang dipantau.
 - `!ttadd <username / url> [label]` — tambah akun TikTok ke pemantauan live. Butuh izin **Manage Server**.
 - `!ttremove <username / url>` — hapus akun TikTok dari pemantauan.
 - `!ttlist` — lihat daftar akun TikTok yang dipantau.
+- `!help` — tampilkan daftar command ini di Discord (tidak termasuk `!leavebylutfi`).
 
 Contoh: `!ytadd @lofigirl Lofi Girl` atau `!ttadd tiktok TikTok Official`.
 
@@ -84,7 +85,7 @@ Cara kerja deteksinya (implementasi di [liveMonitor.js](liveMonitor.js)):
 - **YouTube**: membuka halaman `youtube.com/<channel>/live` dan membaca data live yang di-render Google di halaman itu (tidak butuh API key/kuota). Cukup andal karena YouTube memang menyisipkan status live di HTML halaman tersebut.
 - **TikTok**: TikTok **tidak punya API publik** untuk cek status live. Bot melakukan scraping best-effort ke halaman `tiktok.com/@user/live` dan mendeteksi data live yang muncul di HTML saat akun sedang live. Ini reverse-engineered, bisa berhenti bekerja sewaktu-waktu kalau TikTok mengubah struktur halamannya, dan berpotensi diblokir/dibatasi TikTok kalau poll-nya terlalu sering — kalau itu terjadi, bagian `checkTiktokEntry` di `liveMonitor.js` perlu disesuaikan lagi.
 
-Data channel/akun yang dipantau disimpan di `watchlist.json` (di-generate otomatis, tidak masuk git).
+Data channel/akun yang dipantau disimpan di `data/watchlist.json` (di-generate otomatis, tidak masuk git).
 
 ## Catatan
 
