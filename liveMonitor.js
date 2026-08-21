@@ -28,13 +28,33 @@ if (!Array.isArray(watchlist.youtube)) watchlist.youtube = [];
 if (!Array.isArray(watchlist.tiktok)) watchlist.tiktok = [];
 
 async function fetchText(url) {
-  const res = await fetch(url, {
-    headers: {
-      'User-Agent': USER_AGENT,
-      'Accept-Language': 'en-US,en;q=0.9',
-    },
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20_000);
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': USER_AGENT,
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+      signal: controller.signal,
+    });
+    return await res.text();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Bungkus satu pengecekan dengan batas waktu keras. Tanpa ini, satu request
+// yang macet (network hiccup, dsb) bisa membuat satu siklus poll tidak pernah
+// selesai — dan karena setInterval tidak menunggu siklus sebelumnya beres,
+// siklus-siklus berikutnya numpuk di atasnya (makin lama makin banyak context
+// Chromium kebuka bersamaan) sampai akhirnya kehabisan memori.
+function withTimeout(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Timeout ${ms}ms saat cek ${label}`)), ms);
   });
-  return res.text();
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 // --- YouTube ---------------------------------------------------------------
@@ -170,14 +190,20 @@ function listTiktok() {
 // & merender status live lewat JavaScript di browser, pakai API internal yang
 // wajib disertai token anti-bot (X-Bogus/X-Gnarly/msToken) yang dihitung oleh
 // JS TikTok sendiri. Karena itu satu-satunya cara yang reliable adalah benar-benar
-// membuka halamannya lewat browser headless dan membaca document.title — begitu
-// TikTok yakin akun itu live, title halaman berubah jadi mengandung "is LIVE".
+// membuka halamannya lewat browser headless dan mengecek elemen <video> player-nya
+// (lihat checkTiktokEntry) — document.title saja tidak cukup, karena tetap
+// nyangkut bertuliskan "is LIVE" walau live-nya sudah lama berakhir.
+const BROWSER_MAX_AGE_MS = 6 * 60 * 60 * 1000; // recycle tiap 6 jam, jaga-jaga kalau ada leak internal Chromium
+
 let browserPromise = null;
+let browserLaunchedAt = 0;
 
 async function getBrowser() {
   if (browserPromise) {
     const browser = await browserPromise;
-    if (browser.isConnected()) return browser;
+    const expired = Date.now() - browserLaunchedAt > BROWSER_MAX_AGE_MS;
+    if (browser.isConnected() && !expired) return browser;
+    await browser.close().catch(() => {});
     browserPromise = null;
   }
 
@@ -191,6 +217,7 @@ async function getBrowser() {
     launchOptions.channel = 'chrome';
   }
 
+  browserLaunchedAt = Date.now();
   browserPromise = chromium.launch(launchOptions);
   return browserPromise;
 }
@@ -256,7 +283,7 @@ async function pollYoutube(client, channelId) {
   for (const entry of watchlist.youtube) {
     let result;
     try {
-      result = await checkYoutubeEntry(entry);
+      result = await withTimeout(checkYoutubeEntry(entry), 30_000, `YouTube ${entry.label}`);
     } catch (err) {
       console.error(`Gagal cek YouTube ${entry.label}:`, err.message);
       continue;
@@ -280,7 +307,7 @@ async function pollTiktok(client, channelId) {
   for (const entry of watchlist.tiktok) {
     let result;
     try {
-      result = await checkTiktokEntry(entry);
+      result = await withTimeout(checkTiktokEntry(entry), 45_000, `TikTok @${entry.username}`);
     } catch (err) {
       console.error(`Gagal cek TikTok ${entry.label}:`, err.message);
       continue;
@@ -304,9 +331,24 @@ function startLiveMonitor(client) {
     return;
   }
 
+  let running = false;
   const tick = async () => {
-    await pollYoutube(client, channelId);
-    await pollTiktok(client, channelId);
+    // setInterval tidak menunggu callback sebelumnya selesai — tanpa kunci ini,
+    // satu siklus yang lambat/macet bisa numpuk dengan siklus berikutnya dan
+    // dobel-buka context Chromium tanpa batas.
+    if (running) {
+      console.warn('Siklus live-monitor sebelumnya masih berjalan, skip siklus ini.');
+      return;
+    }
+    running = true;
+    try {
+      await pollYoutube(client, channelId);
+      await pollTiktok(client, channelId);
+    } catch (err) {
+      console.error('Live monitor tick gagal:', err);
+    } finally {
+      running = false;
+    }
   };
 
   tick();
