@@ -207,7 +207,9 @@ async function playCommand(message, args) {
   try {
     meta = await resolveTrack(args.join(' '));
   } catch (err) {
-    return message.reply(err instanceof UserFacingError ? err.message : 'Gagal memproses link itu, coba lagi.');
+    if (err instanceof UserFacingError) return message.reply(err.message);
+    console.error('Gagal resolve track:', err.message);
+    return message.reply('Gagal memproses link itu, coba lagi.');
   }
 
   const state = getState(message.guild.id);
