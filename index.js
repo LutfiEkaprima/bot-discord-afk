@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const {
   joinVoiceChannel,
   getVoiceConnection,
@@ -8,14 +8,13 @@ const {
 } = require('@discordjs/voice');
 const { setupActivityLogger } = require('./activityLogger');
 const {
-  startLiveMonitor,
-  addYoutube,
-  removeYoutube,
-  listYoutube,
-  addTiktok,
-  removeTiktok,
-  listTiktok,
-} = require('./liveMonitor');
+  playCommand,
+  skipCommand,
+  stopCommand,
+  pauseCommand,
+  resumeCommand,
+  queueCommand,
+} = require('./musicPlayer');
 
 const PREFIX = process.env.PREFIX || '!';
 const RECONNECT_DELAY_MS = 5_000;
@@ -29,40 +28,40 @@ const HELP_ENTRIES = [
     example: '!join',
   },
   {
-    usage: 'ytadd <channel_id / @handle / url> [label]',
-    description: 'Tambah channel YouTube ke pemantauan live. Kalau channel-nya live, notifikasi + link stream otomatis dikirim ke channel LIVE_CHANNEL_ID.',
-    notes: 'Butuh izin **Manage Server**. `<...>` wajib diisi, `[label]` opsional (nama tampilan di notifikasi, boleh lebih dari satu kata).',
-    example: '!ytadd @lofigirl Lofi Girl',
+    usage: 'play <link YouTube atau Spotify>',
+    description: 'Putar lagu dari link YouTube atau Spotify (1 lagu) di voice channel kamu. Kalau sedang ada yang diputar, ditambahkan ke antrean.',
+    notes: 'Kamu harus sudah berada di sebuah voice channel dulu. Link playlist/album belum didukung, pakai link 1 lagu saja.',
+    example: '!play https://www.youtube.com/watch?v=dQw4w9WgXcQ',
   },
   {
-    usage: 'ytremove <channel_id / @handle / url>',
-    description: 'Hapus channel YouTube dari pemantauan.',
-    notes: 'Butuh izin **Manage Server**. Isi persis seperti saat `!ytadd` (handle/ID/url yang sama).',
-    example: '!ytremove @lofigirl',
-  },
-  {
-    usage: 'ytlist',
-    description: 'Lihat daftar channel YouTube yang sedang dipantau, beserta status live-nya sekarang.',
+    usage: 'skip',
+    description: 'Lewati lagu yang sedang diputar, lanjut ke antrean berikutnya.',
     notes: 'Bisa dipakai siapa saja, tidak butuh izin khusus.',
-    example: '!ytlist',
+    example: '!skip',
   },
   {
-    usage: 'ttadd <username / url> [label]',
-    description: 'Tambah akun TikTok ke pemantauan live. Kalau akunnya live, notifikasi + link stream otomatis dikirim ke channel LIVE_CHANNEL_ID.',
-    notes: 'Butuh izin **Manage Server**. `<...>` wajib diisi, `[label]` opsional.',
-    example: '!ttadd poung770',
-  },
-  {
-    usage: 'ttremove <username / url>',
-    description: 'Hapus akun TikTok dari pemantauan.',
-    notes: 'Butuh izin **Manage Server**. Isi persis seperti saat `!ttadd` (username/url yang sama).',
-    example: '!ttremove poung770',
-  },
-  {
-    usage: 'ttlist',
-    description: 'Lihat daftar akun TikTok yang sedang dipantau, beserta status live-nya sekarang.',
+    usage: 'pause',
+    description: 'Jeda lagu yang sedang diputar.',
     notes: 'Bisa dipakai siapa saja, tidak butuh izin khusus.',
-    example: '!ttlist',
+    example: '!pause',
+  },
+  {
+    usage: 'resume',
+    description: 'Lanjutkan lagu yang tadi dijeda.',
+    notes: 'Bisa dipakai siapa saja, tidak butuh izin khusus.',
+    example: '!resume',
+  },
+  {
+    usage: 'stop',
+    description: 'Berhenti memutar, kosongkan antrean, dan bot keluar dari voice channel.',
+    notes: 'Bisa dipakai siapa saja, tidak butuh izin khusus.',
+    example: '!stop',
+  },
+  {
+    usage: 'queue',
+    description: 'Lihat lagu yang sedang diputar dan antrean berikutnya.',
+    notes: 'Bisa dipakai siapa saja, tidak butuh izin khusus.',
+    example: '!queue',
   },
   {
     usage: 'help',
@@ -83,7 +82,6 @@ const client = new Client({
 });
 
 setupActivityLogger(client);
-startLiveMonitor(client);
 
 client.once('ready', () => {
   console.log(`Logged in as ${client.user.tag}`);
@@ -170,58 +168,28 @@ client.on('messageCreate', async (message) => {
     return message.reply('Keluar dari voice channel.');
   }
 
-  const canManageWatchlist = () => message.member?.permissions?.has(PermissionFlagsBits.ManageGuild);
-
-  if (command === 'ytadd') {
-    if (!canManageWatchlist()) return message.reply('Butuh izin **Manage Server** untuk pakai command ini.');
-    if (!args[0]) return message.reply('Pakai: `!ytadd <channel_id / @handle / url> [label]`');
-
-    const [target, ...labelParts] = args;
-    const { added } = addYoutube(target, labelParts.join(' '));
-    return message.reply(
-      added ? `Channel YouTube **${target}** ditambahkan ke pemantauan.` : `Channel **${target}** sudah ada di daftar pantau.`,
-    );
+  if (command === 'play') {
+    return playCommand(message, args);
   }
 
-  if (command === 'ytremove') {
-    if (!canManageWatchlist()) return message.reply('Butuh izin **Manage Server** untuk pakai command ini.');
-    if (!args[0]) return message.reply('Pakai: `!ytremove <channel_id / @handle / url>`');
-
-    const removed = removeYoutube(args[0]);
-    return message.reply(removed ? `Channel **${args[0]}** dihapus dari pemantauan.` : `Channel **${args[0]}** tidak ditemukan di daftar pantau.`);
+  if (command === 'skip') {
+    return skipCommand(message);
   }
 
-  if (command === 'ytlist') {
-    const entries = listYoutube();
-    if (entries.length === 0) return message.reply('Belum ada channel YouTube yang dipantau.');
-    const lines = entries.map((e) => `- **${e.label}** (${e.key}) ${e.isLive ? '🔴 sedang live' : ''}`);
-    return message.reply(lines.join('\n'));
+  if (command === 'pause') {
+    return pauseCommand(message);
   }
 
-  if (command === 'ttadd') {
-    if (!canManageWatchlist()) return message.reply('Butuh izin **Manage Server** untuk pakai command ini.');
-    if (!args[0]) return message.reply('Pakai: `!ttadd <username / url> [label]`');
-
-    const [target, ...labelParts] = args;
-    const { added } = addTiktok(target, labelParts.join(' '));
-    return message.reply(
-      added ? `Akun TikTok **${target}** ditambahkan ke pemantauan.` : `Akun **${target}** sudah ada di daftar pantau.`,
-    );
+  if (command === 'resume') {
+    return resumeCommand(message);
   }
 
-  if (command === 'ttremove') {
-    if (!canManageWatchlist()) return message.reply('Butuh izin **Manage Server** untuk pakai command ini.');
-    if (!args[0]) return message.reply('Pakai: `!ttremove <username / url>`');
-
-    const removed = removeTiktok(args[0]);
-    return message.reply(removed ? `Akun **${args[0]}** dihapus dari pemantauan.` : `Akun **${args[0]}** tidak ditemukan di daftar pantau.`);
+  if (command === 'stop') {
+    return stopCommand(message);
   }
 
-  if (command === 'ttlist') {
-    const entries = listTiktok();
-    if (entries.length === 0) return message.reply('Belum ada akun TikTok yang dipantau.');
-    const lines = entries.map((e) => `- **${e.label}** (@${e.username}) ${e.isLive ? '🔴 sedang live' : ''}`);
-    return message.reply(lines.join('\n'));
+  if (command === 'queue') {
+    return queueCommand(message);
   }
 });
 
