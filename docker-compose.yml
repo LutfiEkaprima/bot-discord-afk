@@ -6,6 +6,7 @@ services:
     env_file:
       - .env
     # Aktifkan kalau YTDLP_COOKIES_PATH diisi di .env (lihat README bagian Music Player
-    # -> "Sign in to confirm you're not a bot").
+    # -> "Sign in to confirm you're not a bot"). HARUS writable (bukan :ro) karena
+    # yt-dlp menulis ulang file ini tiap selesai jalan buat nyimpen cookies yang di-refresh.
     # volumes:
-    #   - ./cookies.txt:/app/cookies.txt:ro
+    #   - ./cookies.txt:/app/cookies.txt
