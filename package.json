@@ -14,7 +14,6 @@
     "@discordjs/voice": "^0.19.2",
     "discord.js": "^14.27.0",
     "dotenv": "^17.4.2",
-    "libsodium-wrappers": "^0.8.4",
-    "playwright-core": "^1.62.1"
+    "libsodium-wrappers": "^0.8.4"
   }
 }
