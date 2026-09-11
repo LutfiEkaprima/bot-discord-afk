@@ -10,8 +10,17 @@ const {
 
 const YTDLP_PATH = process.env.YTDLP_PATH || 'yt-dlp';
 const FFMPEG_PATH = process.env.FFMPEG_PATH || 'ffmpeg';
+const YTDLP_COOKIES_PATH = process.env.YTDLP_COOKIES_PATH;
 const YTDLP_TIMEOUT_MS = 60_000;
 const IDLE_LEAVE_MS = 5 * 60 * 1000;
+
+// YouTube sering minta "Sign in to confirm you're not a bot" buat request yang
+// datang dari IP VPS/datacenter. Kalau YTDLP_COOKIES_PATH diisi (cookies.txt dari
+// sesi browser yang sudah login), sisipkan ke tiap pemanggilan yt-dlp supaya
+// requestnya dianggap bukan bot.
+function withCookies(args) {
+  return YTDLP_COOKIES_PATH ? [...args, '--cookies', YTDLP_COOKIES_PATH] : args;
+}
 
 class UserFacingError extends Error {}
 
@@ -38,7 +47,7 @@ function ytdlpJson(input) {
   return new Promise((resolve, reject) => {
     execFile(
       YTDLP_PATH,
-      ['-j', '--no-playlist', '--no-warnings', input],
+      withCookies(['-j', '--no-playlist', '--no-warnings', input]),
       { maxBuffer: 10 * 1024 * 1024, timeout: YTDLP_TIMEOUT_MS },
       (err, stdout, stderr) => {
         if (err) return reject(new Error(stderr?.toString().trim() || err.message));
@@ -102,7 +111,7 @@ async function resolveTrack(input) {
 // dipipe ke ffmpeg buat di-transcode jadi PCM mentah yang bisa langsung dikonsumsi
 // @discordjs/voice.
 function createAudioStream(url) {
-  const ytdlp = spawn(YTDLP_PATH, ['-f', 'bestaudio/best', '--no-playlist', '-o', '-', url], {
+  const ytdlp = spawn(YTDLP_PATH, withCookies(['-f', 'bestaudio/best', '--no-playlist', '-o', '-', url]), {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   const ffmpeg = spawn(

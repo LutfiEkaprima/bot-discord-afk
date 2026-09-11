@@ -95,6 +95,16 @@ Cara kerjanya (implementasi di [musicPlayer.js](musicPlayer.js)):
    docker compose up -d
    ```
    Ini memaksa `pip3 install yt-dlp` jalan ulang dan ambil versi paling baru.
+3. Kalau errornya persis **"Sign in to confirm you're not a bot"** — ini bukan soal versi yt-dlp basi, tapi YouTube memang mendeteksi & memblokir request dari IP VPS/datacenter (umum banget kalau bot di-hosting di cloud/VPS). Solusinya: kasih yt-dlp cookies dari sesi browser yang sudah login, supaya requestnya dianggap datang dari pengguna asli, bukan bot. Caranya:
+   1. Di browser kamu (bukan di server), install extension **"Get cookies.txt LOCALLY"** ([Chrome Web Store](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc)) atau sejenisnya.
+   2. Login ke YouTube pakai akun Google. **Sangat disarankan pakai akun Google kedua/khusus, bukan akun pribadi utama kamu** — lihat catatan keamanan di bawah.
+   3. Buka youtube.com, klik extension-nya, export cookies buat domain `youtube.com`, simpan sebagai `cookies.txt`.
+   4. Copy file `cookies.txt` itu ke folder project ini di VM (folder yang sama dengan `docker-compose.yml`).
+   5. Di `.env`, isi `YTDLP_COOKIES_PATH=/app/cookies.txt`.
+   6. Di `docker-compose.yml`, un-comment 2 baris `volumes:` yang sudah disediakan (mount `cookies.txt` ke dalam container).
+   7. Rebuild & jalankan ulang: `docker compose up -d --build`.
+
+   **Catatan keamanan penting:** `cookies.txt` isinya token sesi login akun Google itu — siapa pun yang pegang file ini bisa "menyamar" jadi akun tersebut di YouTube selama sesinya masih berlaku, sama bahayanya kayak bocorin password. Jangan pernah commit file ini ke git (sudah di-`.gitignore`-kan), dan **pakai akun Google terpisah khusus buat bot ini**, bukan akun pribadi/utama kamu, supaya kalau server-nya suatu saat kena masalah keamanan, dampaknya tidak menyentuh akun pribadimu. Sesi login ini juga bisa expired/diminta re-verifikasi oleh Google sewaktu-waktu (apalagi karena diakses dari IP VPS) — kalau `!play` mulai gagal lagi dengan error yang sama, ulangi langkah export cookies-nya.
 
 ## Catatan
 
