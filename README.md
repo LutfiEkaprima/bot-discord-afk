@@ -86,6 +86,16 @@ Cara kerjanya (implementasi di [musicPlayer.js](musicPlayer.js)):
 
 **Catatan legal:** yt-dlp mengunduh/streaming audio dari YouTube, yang secara teknis melanggar Terms of Service YouTube meskipun jamak dipakai untuk bot Discord personal/privat. Gunakan dengan bijak dan sesuai kebijakan server Discord tempat bot ini dipakai.
 
+**Troubleshooting `!play` gagal ("Gagal memproses link itu"):** YouTube sering mengubah cara kerjanya buat mempersulit tool seperti yt-dlp, jadi yt-dlp **harus** sering di-update — kalau tidak, ekstraksinya bisa mulai gagal kapan saja. Langkah cek:
+
+1. Lihat pesan error aslinya di log (`docker compose logs -f` atau `docker logs -f botdc`) — error yang dikirim ke Discord sengaja digeneralisir, tapi detail aslinya (dari yt-dlp/ffmpeg) selalu di-`console.error` duluan.
+2. `Dockerfile` install yt-dlp lewat pip (`pip3 install yt-dlp`) supaya dapat rilis terbaru dari PyPI saat build — **tapi** Docker mengcache layer itu, jadi rebuild biasa (`docker compose up -d --build`) belum tentu narik ulang versi terbaru kalau layer-nya belum berubah. Kalau `!play` YouTube berhenti berfungsi padahal sebelumnya normal, coba build ulang tanpa cache dulu:
+   ```bash
+   docker compose build --no-cache
+   docker compose up -d
+   ```
+   Ini memaksa `pip3 install yt-dlp` jalan ulang dan ambil versi paling baru.
+
 ## Catatan
 
 - Bot join dalam kondisi self-mute & self-deaf (khusus command `!join`) supaya hemat bandwidth — tidak mengirim/menerima audio apa pun. Saat memutar musik lewat `!play`, bot join dengan audio aktif (tidak self-mute) supaya bisa terdengar.
