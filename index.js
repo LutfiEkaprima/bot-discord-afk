@@ -7,6 +7,8 @@ const {
   entersState,
 } = require('@discordjs/voice');
 const { setupActivityLogger } = require('./activityLogger');
+const { setupVoiceAttendanceLogger } = require('./voiceAttendanceLogger');
+const { setAfkChannel, clearAfkChannel, getAllAfkChannels } = require('./afkConfig');
 
 const PREFIX = process.env.PREFIX || '!';
 const RECONNECT_DELAY_MS = 5_000;
@@ -15,7 +17,7 @@ const RECONNECT_DELAY_MS = 5_000;
 const HELP_ENTRIES = [
   {
     usage: 'join',
-    description: 'Bot ikut masuk ke voice channel yang sedang kamu tempati dan tetap di sana (self-mute + self-deaf).',
+    description: 'Bot ikut masuk ke voice channel yang sedang kamu tempati dan tetap di sana (self-mute + self-deaf). Channel ini diingat, jadi kalau bot restart/mati, otomatis join lagi ke sini tanpa perlu !join ulang.',
     notes: 'Kamu harus sudah berada di sebuah voice channel dulu sebelum pakai command ini.',
     example: '!join',
   },
@@ -38,9 +40,21 @@ const client = new Client({
 });
 
 setupActivityLogger(client);
+setupVoiceAttendanceLogger(client);
 
-client.once('ready', () => {
+client.once('ready', async () => {
   console.log(`Logged in as ${client.user.tag}`);
+
+  for (const [guildId, channelId] of Object.entries(getAllAfkChannels())) {
+    try {
+      const channel = await client.channels.fetch(channelId);
+      if (!channel) throw new Error('channel tidak ditemukan');
+      connectToChannel(channel);
+      console.log(`Auto-join ke voice channel "${channel.name}" (guild ${guildId})`);
+    } catch (err) {
+      console.error(`Gagal auto-join channel ${channelId} (guild ${guildId}):`, err.message);
+    }
+  }
 });
 
 function connectToChannel(channel) {
@@ -112,11 +126,13 @@ client.on('messageCreate', async (message) => {
     }
 
     connectToChannel(voiceChannel);
-    return message.reply(`Bergabung ke voice channel **${voiceChannel.name}**.`);
+    setAfkChannel(message.guild.id, voiceChannel.id);
+    return message.reply(`Bergabung ke voice channel **${voiceChannel.name}**. Channel ini akan diingat buat auto-join kalau bot restart.`);
   }
 
   if (command === 'leavebylutfi') {
     const connection = getVoiceConnection(message.guild.id);
+    clearAfkChannel(message.guild.id);
     if (!connection) {
       return message.reply('Bot sedang tidak berada di voice channel manapun.');
     }

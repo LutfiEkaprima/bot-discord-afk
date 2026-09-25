@@ -40,12 +40,12 @@ Alternatif tanpa perlu install Node.js di host, cukup Docker:
    docker compose down
    ```
 
-Setiap kali ubah source code, jalankan ulang `docker compose up -d --build` supaya image ter-rebuild.
+Setiap kali ubah source code, jalankan ulang `docker compose up -d --build` supaya image ter-rebuild. Folder `data/` di-mount sebagai volume supaya channel AFK yang diingat (lihat bagian [Auto-Join](#auto-join--voice-attendance-log)) dan file log kehadiran voice tetap ada walau container di-rebuild — otomatis dibuat, tidak perlu setup manual.
 
 ## Command
 
-- `!join` — jalankan sambil kamu sudah berada di sebuah voice channel; bot akan ikut masuk ke channel yang sama dan tetap di sana.
-- `!leavebylutfi` — bot keluar dari voice channel.
+- `!join` — jalankan sambil kamu sudah berada di sebuah voice channel; bot akan ikut masuk ke channel yang sama dan tetap di sana. Channel ini diingat buat auto-join kalau bot restart.
+- `!leavebylutfi` — bot keluar dari voice channel, dan channel yang diingat buat auto-join dihapus.
 - `!help` — tampilkan daftar command ini di Discord (tidak termasuk `!leavebylutfi`).
 
 Prefix bisa diganti lewat variabel `PREFIX` di `.env`.
@@ -65,6 +65,11 @@ Setiap log menampilkan siapa yang jadi target, siapa moderator yang melakukan (k
 **Catatan keterbatasan Discord:** untuk aksi disconnect/move voice yang dilakukan massal (mis. tombol "Disconnect All"), audit log Discord hanya mencatat jumlah member yang terdampak, bukan nama masing-masing — bot akan menampilkan jumlahnya saja tanpa menyebut member spesifik.
 
 Fitur ini hanya mencatat aksi moderasi (bukan join/leave biasa atau chat). Kalau butuh log tambahan (mis. member baru join/leave, pesan dihapus, perubahan role), tinggal tambah handler baru di [activityLogger.js](activityLogger.js).
+
+## Auto-Join & Voice Attendance Log
+
+- **Auto-join**: begitu `!join` dipakai, channel voice-nya diingat (disimpan di `data/afk-channels.json`, per server). Kalau bot mati/restart (crash, redeploy, dsb), begitu nyala lagi bot otomatis join ke channel yang sama tanpa perlu `!join` ulang. `!leavebylutfi` menghapus channel yang diingat itu, jadi bot tidak auto-join lagi sampai `!join` dipakai lagi.
+- **Voice attendance log**: implementasi di [voiceAttendanceLogger.js](voiceAttendanceLogger.js). Setiap ada member yang join/leave voice channel **yang sama dengan tempat bot berada**, dicatat (timestamp, nama, ID) ke `data/voice-attendance.log` dan ke console (`docker logs -f botdc`). **Sengaja tidak dikirim ke Discord sama sekali** — murni catatan lokal. File log-nya terus bertambah seiring waktu, tidak ada rotasi/pembersihan otomatis — hapus manual (`rm data/voice-attendance.log`) kalau sudah terlalu besar.
 
 ## Catatan
 
