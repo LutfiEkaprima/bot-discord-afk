@@ -7,14 +7,6 @@ const {
   entersState,
 } = require('@discordjs/voice');
 const { setupActivityLogger } = require('./activityLogger');
-const {
-  playCommand,
-  skipCommand,
-  stopCommand,
-  pauseCommand,
-  resumeCommand,
-  queueCommand,
-} = require('./musicPlayer');
 
 const PREFIX = process.env.PREFIX || '!';
 const RECONNECT_DELAY_MS = 5_000;
@@ -26,42 +18,6 @@ const HELP_ENTRIES = [
     description: 'Bot ikut masuk ke voice channel yang sedang kamu tempati dan tetap di sana (self-mute + self-deaf).',
     notes: 'Kamu harus sudah berada di sebuah voice channel dulu sebelum pakai command ini.',
     example: '!join',
-  },
-  {
-    usage: 'play <link YouTube atau Spotify>',
-    description: 'Putar lagu dari link YouTube atau Spotify (1 lagu) di voice channel kamu. Kalau sedang ada yang diputar, ditambahkan ke antrean.',
-    notes: 'Kamu harus sudah berada di sebuah voice channel dulu. Link playlist/album belum didukung, pakai link 1 lagu saja.',
-    example: '!play https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-  },
-  {
-    usage: 'skip',
-    description: 'Lewati lagu yang sedang diputar, lanjut ke antrean berikutnya.',
-    notes: 'Bisa dipakai siapa saja, tidak butuh izin khusus.',
-    example: '!skip',
-  },
-  {
-    usage: 'pause',
-    description: 'Jeda lagu yang sedang diputar.',
-    notes: 'Bisa dipakai siapa saja, tidak butuh izin khusus.',
-    example: '!pause',
-  },
-  {
-    usage: 'resume',
-    description: 'Lanjutkan lagu yang tadi dijeda.',
-    notes: 'Bisa dipakai siapa saja, tidak butuh izin khusus.',
-    example: '!resume',
-  },
-  {
-    usage: 'stop',
-    description: 'Berhenti memutar, kosongkan antrean, dan bot keluar dari voice channel.',
-    notes: 'Bisa dipakai siapa saja, tidak butuh izin khusus.',
-    example: '!stop',
-  },
-  {
-    usage: 'queue',
-    description: 'Lihat lagu yang sedang diputar dan antrean berikutnya.',
-    notes: 'Bisa dipakai siapa saja, tidak butuh izin khusus.',
-    example: '!queue',
   },
   {
     usage: 'help',
@@ -166,30 +122,6 @@ client.on('messageCreate', async (message) => {
     }
     connection.destroy();
     return message.reply('Keluar dari voice channel.');
-  }
-
-  if (command === 'play') {
-    return playCommand(message, args);
-  }
-
-  if (command === 'skip') {
-    return skipCommand(message);
-  }
-
-  if (command === 'pause') {
-    return pauseCommand(message);
-  }
-
-  if (command === 'resume') {
-    return resumeCommand(message);
-  }
-
-  if (command === 'stop') {
-    return stopCommand(message);
-  }
-
-  if (command === 'queue') {
-    return queueCommand(message);
   }
 });
 
