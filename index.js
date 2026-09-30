@@ -13,6 +13,18 @@ const { setAfkChannel, clearAfkChannel, getAllAfkChannels } = require('./afkConf
 const PREFIX = process.env.PREFIX || '!';
 const RECONNECT_DELAY_MS = 5_000;
 
+// Jaring pengaman terakhir: satu error tak terduga di satu handler (voice,
+// event Discord, dsb) tidak boleh mematikan seluruh bot secara diam-diam.
+// Perbaikan yang benar tetap di titik errornya masing-masing (lihat safeDestroy),
+// ini cuma cadangan supaya kalau ada kasus serupa yang belum ketahuan, botnya
+// tetap hidup dan errornya kelihatan di log, bukan bikin seluruh proses mati.
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled rejection:', err);
+});
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err);
+});
+
 // Command "leave" sengaja tidak dimasukkan ke !help.
 const HELP_ENTRIES = [
   {
@@ -57,6 +69,15 @@ client.once('ready', async () => {
   }
 });
 
+function safeDestroy(connection) {
+  if (connection.state.status === VoiceConnectionStatus.Destroyed) return;
+  try {
+    connection.destroy();
+  } catch (err) {
+    console.error('Gagal destroy voice connection (kemungkinan sudah destroyed):', err.message);
+  }
+}
+
 function connectToChannel(channel) {
   const connection = joinVoiceChannel({
     channelId: channel.id,
@@ -76,7 +97,10 @@ function connectToChannel(channel) {
       ]);
       // Reconnecting on its own, nothing to do.
     } catch {
-      connection.destroy();
+      // The connection can already be Destroyed by the time we get here (e.g. it
+      // tore itself down internally after repeated failures) — destroy() throws
+      // in that case, and an uncaught throw here would crash the whole process.
+      safeDestroy(connection);
       setTimeout(() => {
         const freshChannel = client.channels.cache.get(channel.id);
         if (freshChannel) connectToChannel(freshChannel);
@@ -136,7 +160,7 @@ client.on('messageCreate', async (message) => {
     if (!connection) {
       return message.reply('Bot sedang tidak berada di voice channel manapun.');
     }
-    connection.destroy();
+    safeDestroy(connection);
     return message.reply('Keluar dari voice channel.');
   }
 });
